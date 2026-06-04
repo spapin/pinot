@@ -49,6 +49,9 @@ public class IdenticalPredicateFilterOptimizer extends BaseAndOrBooleanFilterOpt
         if (hasIdenticalLhsAndRhs(function.getOperands())) {
           return TRUE;
         }
+        if (hasIdenticalComparisonFunctionWithTrueLiteral(function.getOperands())) {
+          return isAlwaysTrueForIdentical(function.getOperands().get(0).getFunctionCall().getOperator()) ? TRUE : FALSE;
+        }
         break;
       case NOT_EQUALS:
         if (hasIdenticalLhsAndRhs(function.getOperands())) {
@@ -100,5 +103,34 @@ public class IdenticalPredicateFilterOptimizer extends BaseAndOrBooleanFilterOpt
   private boolean isLiteralZero(Expression expression) {
     Literal literal = expression.getLiteral();
     return literal != null && literal.isSetIntValue() && literal.getIntValue() == 0;
+  }
+
+  private boolean hasIdenticalComparisonFunctionWithTrueLiteral(List<Expression> operands) {
+    if (operands.size() != 2) {
+      return false;
+    }
+    Expression lhs = operands.get(0);
+    Expression rhs = operands.get(1);
+    if (lhs.getFunctionCall() == null) {
+      return false;
+    }
+    Literal rhsLiteral = rhs.getLiteral();
+    if (rhsLiteral == null || !rhsLiteral.isSetBoolValue() || !rhsLiteral.getBoolValue()) {
+      return false;
+    }
+    List<Expression> innerOperands = lhs.getFunctionCall().getOperands();
+    return innerOperands.size() == 2 && innerOperands.get(0) != null && innerOperands.get(0)
+        .equals(innerOperands.get(1));
+  }
+
+  private boolean isAlwaysTrueForIdentical(String operator) {
+    switch (operator) {
+      case "equals":
+      case "greater_than_or_equal":
+      case "less_than_or_equal":
+        return true;
+      default:
+        return false;
+    }
   }
 }
