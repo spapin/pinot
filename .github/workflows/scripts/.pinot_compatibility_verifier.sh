@@ -63,6 +63,8 @@ echo "</settings>">> ${SETTINGS_FILE}
 export PINOT_MAVEN_OPTS="${PINOT_MAVEN_OPTS:-} -s $(pwd)/${SETTINGS_FILE}"
 
 # Compare commit hash for compatibility verification
+# Ensure apache/pinot tags (e.g. release-1.5.0) are available when running on a fork
+git remote add upstream https://github.com/apache/pinot.git 2>/dev/null || true
 git fetch --all --tags
 function commitHash() {
   local commit=$1
