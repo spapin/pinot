@@ -79,7 +79,6 @@ import org.apache.pinot.spi.utils.CommonConstants.Helix;
 import org.apache.pinot.spi.utils.CommonConstants.MultiStageQueryRunner;
 import org.apache.pinot.spi.utils.CommonConstants.Server;
 import org.apache.pinot.spi.utils.JsonUtils;
-import org.apache.pinot.spi.utils.NetUtils;
 import org.intellij.lang.annotations.Language;
 import org.testng.Assert;
 import org.testng.SkipException;
@@ -186,23 +185,21 @@ public abstract class ClusterTest extends ControllerTest {
     brokerConf.setProperty(Helix.CONFIG_OF_ZOOKEEPER_SERVER, getZkUrl());
     brokerConf.setProperty(Helix.CONFIG_OF_CLUSTER_NAME, getHelixClusterName());
     brokerConf.setProperty(Broker.CONFIG_OF_BROKER_HOSTNAME, LOCAL_HOST);
-    int brokerPort = NetUtils.findOpenPort(_nextBrokerPort);
+    int brokerPort = nextFreePort();
     brokerConf.setProperty(Helix.KEY_OF_BROKER_QUERY_PORT, brokerPort);
     _brokerPorts.add(brokerPort);
     if (_brokerBaseApiUrl == null) {
       _brokerBaseApiUrl = "http://localhost:" + brokerPort;
     }
-    _nextBrokerPort = brokerPort + 1;
     brokerConf.setProperty(Broker.CONFIG_OF_BROKER_TIMEOUT_MS, 60 * 1000L);
     brokerConf.setProperty(Broker.CONFIG_OF_DELAY_SHUTDOWN_TIME_MS, 0);
     brokerConf.setProperty(CommonConstants.CONFIG_OF_TIMEZONE, "UTC");
 
-    int brokerGrpcPort = NetUtils.findOpenPort(_nextBrokerGrpcPort);
+    int brokerGrpcPort = nextFreePort();
     brokerConf.setProperty(Broker.Grpc.KEY_OF_GRPC_PORT, brokerGrpcPort);
     if (_brokerGrpcEndpoint == null) {
       _brokerGrpcEndpoint = "localhost:" + brokerGrpcPort;
     }
-    _nextBrokerGrpcPort = brokerGrpcPort + 1;
     overrideBrokerConf(brokerConf);
     return brokerConf;
   }
@@ -260,26 +257,21 @@ public abstract class ClusterTest extends ControllerTest {
     serverConf.setProperty(Server.CONFIG_OF_SEGMENT_FORMAT_VERSION, "v3");
     serverConf.setProperty(Server.CONFIG_OF_SHUTDOWN_ENABLE_QUERY_CHECK, false);
 
-    int serverAdminApiPort = NetUtils.findOpenPort(_nextServerPort);
+    int serverAdminApiPort = nextFreePort();
     serverConf.setProperty(Server.CONFIG_OF_ADMIN_API_PORT, serverAdminApiPort);
-    int serverNettyPort = NetUtils.findOpenPort(serverAdminApiPort + 1);
+    int serverNettyPort = nextFreePort();
     serverConf.setProperty(Helix.KEY_OF_SERVER_NETTY_PORT, serverNettyPort);
-    int serverGrpcPort = NetUtils.findOpenPort(serverNettyPort + 1);
+    int serverGrpcPort = nextFreePort();
     serverConf.setProperty(Server.CONFIG_OF_GRPC_PORT, serverGrpcPort);
-    // Assign the multi-stage query engine ports explicitly using the incremental findOpenPort pattern so that
-    // rapid back-to-back server starts in the same JVM don't collide on OS-ephemeral ports. Otherwise
-    // BaseServerStarter.init() falls back to NetUtils.findOpenPort() which probes and releases a ServerSocket(0)
-    // before the gRPC server binds, opening a window where the same port can be handed to a later caller.
-    int queryServerPort = NetUtils.findOpenPort(serverGrpcPort + 1);
+    int queryServerPort = nextFreePort();
     serverConf.setProperty(MultiStageQueryRunner.KEY_OF_QUERY_SERVER_PORT, queryServerPort);
-    int queryRunnerPort = NetUtils.findOpenPort(queryServerPort + 1);
+    int queryRunnerPort = nextFreePort();
     serverConf.setProperty(MultiStageQueryRunner.KEY_OF_QUERY_RUNNER_PORT, queryRunnerPort);
     if (_serverAdminApiPort == 0) {
       _serverAdminApiPort = serverAdminApiPort;
       _serverNettyPort = serverNettyPort;
       _serverGrpcPort = serverGrpcPort;
     }
-    _nextServerPort = queryRunnerPort + 1;
 
     // Thread time measurement is disabled by default, enable it in integration tests.
     // TODO: this can be removed when we eventually enable thread time measurement by default.
@@ -344,12 +336,11 @@ public abstract class ClusterTest extends ControllerTest {
     minionConf.setProperty(Helix.CONFIG_OF_ZOOKEEPER_SERVER, getZkUrl());
     minionConf.setProperty(Helix.CONFIG_OF_CLUSTER_NAME, getHelixClusterName());
     minionConf.setProperty(Helix.KEY_OF_MINION_HOST, LOCAL_HOST);
-    int minionPort = NetUtils.findOpenPort(_nextMinionPort);
+    int minionPort = nextFreePort();
     minionConf.setProperty(Helix.KEY_OF_MINION_PORT, minionPort);
     if (_minionBaseApiUrl == null) {
       _minionBaseApiUrl = "http://localhost:" + minionPort;
     }
-    _nextMinionPort = minionPort + 1;
     minionConf.setProperty(Helix.Instance.DATA_DIR_KEY, TEMP_MINION_DIR + File.separator + "dataDir");
     minionConf.setProperty(CommonConstants.CONFIG_OF_TIMEZONE, "UTC");
     overrideMinionConf(minionConf);
