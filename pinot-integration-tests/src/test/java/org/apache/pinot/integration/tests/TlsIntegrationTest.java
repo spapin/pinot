@@ -70,7 +70,6 @@ import org.apache.pinot.spi.data.Schema;
 import org.apache.pinot.spi.env.PinotConfiguration;
 import org.apache.pinot.spi.utils.CommonConstants;
 import org.apache.pinot.spi.utils.JsonUtils;
-import org.apache.pinot.spi.utils.NetUtils;
 import org.apache.pinot.spi.utils.builder.TableNameBuilder;
 import org.apache.pinot.tools.utils.PinotConfigUtils;
 import org.apache.pinot.util.TestUtils;
@@ -181,9 +180,8 @@ public class TlsIntegrationTest extends BaseClusterIntegrationTest {
     prop.put("controller.access.protocols.internal.port", _internalControllerPort);
     prop.put("controller.access.protocols.internal.tls.client.auth.enabled", "true");
     prop.put("controller.access.protocols.external.protocol", "https");
-    _externalControllerPort = NetUtils.findOpenPort(_internalControllerPort + 1);
+    _externalControllerPort = nextFreePort();
     prop.put("controller.access.protocols.external.port", _externalControllerPort);
-    _nextControllerPort = _externalControllerPort + 1;
     prop.put("controller.access.protocols.external.tls.keystore.path", TLS_STORE_JKS);
     prop.put("controller.access.protocols.external.tls.keystore.type", JKS);
     prop.put("controller.access.protocols.external.tls.truststore.path", TLS_STORE_JKS);
@@ -211,16 +209,15 @@ public class TlsIntegrationTest extends BaseClusterIntegrationTest {
     // CAUTION: order matters. first listener becomes registered as internal address in zookeeper
     brokerConf.setProperty("pinot.broker.client.access.protocols", "internal,external");
     brokerConf.setProperty("pinot.broker.client.access.protocols.internal.protocol", "https");
-    _internalBrokerPort = NetUtils.findOpenPort(_nextBrokerPort);
+    _internalBrokerPort = nextFreePort();
     brokerConf.setProperty("pinot.broker.client.access.protocols.internal.port", _internalBrokerPort);
     _brokerPorts.add(_internalBrokerPort);
     brokerConf.setProperty("pinot.broker.client.access.protocols.internal.tls.client.auth.enabled", "true");
     brokerConf.setProperty("pinot.broker.client.access.protocols.external.protocol", "https");
-    _externalBrokerPort = NetUtils.findOpenPort(_internalBrokerPort + 1);
+    _externalBrokerPort = nextFreePort();
     brokerConf.setProperty("pinot.broker.client.access.protocols.external.port", _externalBrokerPort);
     _brokerPorts.add(_externalBrokerPort);
     _brokerBaseApiUrl = "https://localhost:" + _externalBrokerPort;
-    _nextBrokerPort = _externalBrokerPort + 1;
     brokerConf.setProperty("pinot.broker.client.access.protocols.external.tls.keystore.path", TLS_STORE_JKS);
     brokerConf.setProperty("pinot.broker.client.access.protocols.external.tls.keystore.type", JKS);
     brokerConf.setProperty("pinot.broker.client.access.protocols.external.tls.truststore.path", TLS_STORE_JKS);
@@ -249,13 +246,12 @@ public class TlsIntegrationTest extends BaseClusterIntegrationTest {
         CertBasedTlsChannelAccessControlFactory.class.getName());
     serverConf.setProperty("pinot.server.adminapi.access.protocols", "internal");
     serverConf.setProperty("pinot.server.adminapi.access.protocols.internal.protocol", "https");
-    int internalAdminPort = NetUtils.findOpenPort(_nextServerPort);
+    int internalAdminPort = nextFreePort();
     serverConf.setProperty("pinot.server.adminapi.access.protocols.internal.port", internalAdminPort);
     serverConf.setProperty("pinot.server.netty.enabled", "false");
     serverConf.setProperty("pinot.server.nettytls.enabled", "true");
-    int nettyTlsPort = NetUtils.findOpenPort(internalAdminPort + 1);
+    int nettyTlsPort = nextFreePort();
     serverConf.setProperty("pinot.server.nettytls.port", nettyTlsPort);
-    _nextServerPort = nettyTlsPort + 1;
     serverConf.setProperty("pinot.server.segment.uploader.protocol", "https");
 
     serverConf.setProperty("pinot.multistage.engine.tls.enabled", "true");
