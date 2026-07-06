@@ -49,7 +49,7 @@ concurrency:
 
 jobs:
   binary-compat-check:
-    if: github.repository == 'apache/pinot'
+    if: github.repository == 'apache/pinot' || github.repository == 'spapin/pinot'
     runs-on: ubuntu-latest
     name: Pinot Binary Compatibility Check
     steps:
@@ -171,7 +171,7 @@ jobs:
               --ignore-missing-classes
           done
   compatibility-verifier:
-    if: github.repository == 'apache/pinot'
+    if: github.repository == 'apache/pinot' || github.repository == 'spapin/pinot'
     runs-on: ubuntu-latest
     strategy:
       # Changed to false in order to improve coverage using unsafe buffers
@@ -230,7 +230,7 @@ jobs:
         run: |
           .github/workflows/scripts/.pinot_compatibility_verifier.sh
   multi-stage-compatibility-verifier:
-    if: github.repository == 'apache/pinot'
+    if: github.repository == 'apache/pinot' || github.repository == 'spapin/pinot'
     runs-on: ubuntu-latest
     strategy:
       # Changed to false in order to improve coverage using unsafe buffers
