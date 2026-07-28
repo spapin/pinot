@@ -161,6 +161,12 @@ public class V1Constants {
       public static final String FORWARD_INDEX_ENCODING = "forwardIndexEncoding";
       // Mandatory, treated as `false` when missing for backward compatibility
       public static final String IS_SORTED = "isSorted";
+      // Optional, treated as `false` when missing for backward compatibility. Set to `true` only when null handling is
+      // enabled for the column but it has no null values, so the null value vector bitmap file is skipped. This
+      // distinguishes "null handling applied, no nulls" (flag set, no bitmap file) from "null handling never applied"
+      // (no flag, no bitmap file) — which absence of the bitmap file alone cannot. Columns that do have null values
+      // are identified by the presence of the bitmap file and are not flagged.
+      public static final String IS_NON_NULL = "isNonNull";
       // Optional
       public static final String MIN_VALUE = "minValue";
       // Optional
@@ -215,6 +221,14 @@ public class V1Constants {
       public static final String TOTAL_DOCS = "totalDocs";
 
       public static final String COLUMN_PROPS_KEY_PREFIX = "column.";
+      /// Optional uncompressed serialized column-value bytes for a raw forward index.
+      public static final String FORWARD_INDEX_RAW_UNCOMPRESSED_VALUE_SIZE_IN_BYTES =
+          "forwardIndex.rawUncompressedValueSizeInBytes";
+      public static final String FORWARD_INDEX_RAW_CHUNK_COMPRESSION_TYPE =
+          "forwardIndex.rawChunkCompressionType";
+      /// Uncompressed serialized column-value bytes for dictionary encoding, written at seal time.
+      public static final String FORWARD_INDEX_DICTIONARY_ENCODED_UNCOMPRESSED_VALUE_SIZE_IN_BYTES =
+          "forwardIndex.dictionaryEncodedUncompressedValueSizeInBytes";
 
       public static String getKeyFor(String column, String key) {
         return COLUMN_PROPS_KEY_PREFIX + column + "." + key;

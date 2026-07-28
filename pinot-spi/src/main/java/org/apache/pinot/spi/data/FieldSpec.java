@@ -37,8 +37,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import javax.annotation.Nullable;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.pinot.spi.utils.BooleanUtils;
 import org.apache.pinot.spi.utils.ByteArray;
 import org.apache.pinot.spi.utils.BytesUtils;
@@ -173,6 +174,14 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
   @Nullable
   protected List<String> _aliases;
 
+  // Optional, free-form per-column metadata. It is additive, excluded from backward-compatibility
+  // checks, and omitted from serialization when unset/empty. The keys and their interpretation are
+  // defined by whoever populates it; the core schema attaches no semantics to it.
+  @JsonProperty("metadata")
+  @JsonInclude(JsonInclude.Include.NON_EMPTY)
+  @Nullable
+  protected Map<String, String> _metadata;
+
   protected String _name;
   protected DataType _dataType;
   protected boolean _singleValueField = true;
@@ -250,7 +259,7 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
   }
 
   public void setTags(@Nullable List<String> tags) {
-    _tags = tags;
+    _tags = CollectionUtils.isEmpty(tags) ? null : tags;
   }
 
   @Nullable
@@ -268,7 +277,16 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
   }
 
   public void setAliases(@Nullable List<String> aliases) {
-    _aliases = aliases == null || aliases.isEmpty() ? null : aliases;
+    _aliases = CollectionUtils.isEmpty(aliases) ? null : aliases;
+  }
+
+  @Nullable
+  public Map<String, String> getMetadata() {
+    return _metadata;
+  }
+
+  public void setMetadata(@Nullable Map<String, String> metadata) {
+    _metadata = MapUtils.isEmpty(metadata) ? null : metadata;
   }
 
   public DataType getDataType() {
@@ -419,8 +437,9 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
     return _defaultNullValue;
   }
 
+  @JsonIgnore
   public String getDefaultNullValueString() {
-    return _dataType != null ? _dataType.toString(_defaultNullValue) : getStringValue(_defaultNullValue);
+    return _dataType.toString(_defaultNullValue);
   }
 
   /// Returns the [String] representation of the given object.
@@ -462,20 +481,11 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
   @JsonIgnore
   public void setDefaultNullValue(@Nullable Object defaultNullValue) {
     if (defaultNullValue != null) {
-      _stringDefaultNullValue = getStringDefaultNullValue(defaultNullValue);
+      _stringDefaultNullValue = getStringValue(defaultNullValue);
     }
     if (_dataType != null) {
       _defaultNullValue = getDefaultNullValue(getFieldType(), _dataType, _stringDefaultNullValue);
     }
-  }
-
-  // UUID default values must stringify to their canonical 8-4-4-4-12 form (not raw hex) so they round-trip back
-  // through getDefaultNullValue(...); all other types keep the generic getStringValue() form.
-  private String getStringDefaultNullValue(Object defaultNullValue) {
-    if (_dataType == DataType.UUID && !(defaultNullValue instanceof String)) {
-      return _dataType.toString(defaultNullValue);
-    }
-    return getStringValue(defaultNullValue);
   }
 
   public static Object getDefaultNullValue(FieldType fieldType, DataType dataType,
@@ -633,7 +643,7 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
     return jsonObject;
   }
 
-  /// Appends `fieldId` and `aliases` (when set) to the given JSON object.
+  /// Appends `fieldId`, `aliases`, and `metadata` (when set) to the given JSON object.
   ///
   /// Subclasses that build JSON without calling [FieldSpec#toJsonObject()], such as [TimeFieldSpec], use this helper
   /// to preserve these fields during schema round-trip serialization.
@@ -647,6 +657,12 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
         aliasesArray.add(alias);
       }
       jsonObject.set("aliases", aliasesArray);
+    }
+    if (MapUtils.isNotEmpty(_metadata)) {
+      ObjectNode metadataNode = jsonObject.putObject("metadata");
+      for (Map.Entry<String, String> entry : _metadata.entrySet()) {
+        metadataNode.put(entry.getKey(), entry.getValue());
+      }
     }
   }
 
@@ -725,14 +741,15 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
         && Objects.equals(_description, that._description)
         && Objects.equals(_tags, that._tags)
         && Objects.equals(_fieldId, that._fieldId)
-        && Objects.equals(_aliases, that._aliases);
+        && Objects.equals(_aliases, that._aliases)
+        && Objects.equals(_metadata, that._metadata);
   }
 
   @Override
   public int hashCode() {
     return Objects.hash(_name, _dataType, _singleValueField, _notNull, _maxLength, _maxLengthExceedStrategy,
         _allowTrailingZeros, _dataType.hashCode(_defaultNullValue), _transformFunction, _virtualColumnProvider,
-        _description, _tags, _fieldId, _aliases);
+        _description, _tags, _fieldId, _aliases, _metadata);
   }
 
   /**
@@ -748,9 +765,25 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
     DIMENSION, METRIC, TIME, DATE_TIME, COMPLEX
   }
 
-  /**
-   * The <code>DataType</code> enum is used to demonstrate the data type of a field.
-   */
+  /// The `DataType` enum represents the data type of a field.
+  ///
+  /// A value of a given type is held in memory as a fixed Java class, and every value-handling method on this enum
+  /// (`convert`, `equals`, `hashCode`, `compare`, `toString`) expects and produces that representation:
+  /// - `INT` → [Integer]
+  /// - `LONG` → [Long]
+  /// - `FLOAT` → [Float]
+  /// - `DOUBLE` → [Double]
+  /// - `BIG_DECIMAL` → [BigDecimal]
+  /// - `BOOLEAN` → [Integer] (`0` or `1`)
+  /// - `TIMESTAMP` → [Long] (epoch millis)
+  /// - `STRING` / `JSON` → [String]
+  /// - `BYTES` → `byte[]`
+  /// - `UUID` → `byte[]` (fixed 16-byte big-endian form)
+  /// - `MAP` / `OPEN_STRUCT` → [Map]
+  /// - `LIST` → [List]
+  ///
+  /// `convertInternal` is the exception: it returns the internal storage form, which for `BYTES` and `UUID` is
+  /// [ByteArray] rather than `byte[]`.
   @SuppressWarnings("rawtypes")
   public enum DataType {
     // LIST is for complex lists which is different from multi-value column of primitives
@@ -881,23 +914,16 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
             throw new IllegalStateException();
         }
       } catch (Exception e) {
-        throw new IllegalArgumentException(
-            "Cannot convert value: '" + value + "' to type: " + this + " (" + e.getMessage() + ")", e);
+        throw new IllegalArgumentException("Cannot convert value: '" + value + "' to type: " + this);
       }
     }
 
     public boolean equals(Object value1, Object value2) {
-      if (this == UUID) {
-        return UuidUtils.equals(toBytesValue(value1), toBytesValue(value2));
-      }
-      return this == BYTES ? Arrays.equals(toBytesValue(value1), toBytesValue(value2)) : value1.equals(value2);
+      return this == BYTES || this == UUID ? Arrays.equals((byte[]) value1, (byte[]) value2) : value1.equals(value2);
     }
 
     public int hashCode(Object value) {
-      if (this == UUID) {
-        return UuidUtils.hashCode(toBytesValue(value));
-      }
-      return this == BYTES ? Arrays.hashCode(toBytesValue(value)) : value.hashCode();
+      return this == BYTES || this == UUID ? Arrays.hashCode((byte[]) value) : value.hashCode();
     }
 
     /**
@@ -910,8 +936,10 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
     public int compare(Object value1, Object value2) {
       switch (this) {
         case INT:
+        case BOOLEAN:
           return Integer.compare((int) value1, (int) value2);
         case LONG:
+        case TIMESTAMP:
           return Long.compare((long) value1, (long) value2);
         case FLOAT:
           return Float.compare((float) value1, (float) value2);
@@ -919,17 +947,12 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
           return Double.compare((double) value1, (double) value2);
         case BIG_DECIMAL:
           return ((BigDecimal) value1).compareTo((BigDecimal) value2);
-        case BOOLEAN:
-          return Boolean.compare((boolean) value1, (boolean) value2);
-        case TIMESTAMP:
-          return Long.compare((long) value1, (long) value2);
         case STRING:
         case JSON:
           return ((String) value1).compareTo((String) value2);
         case BYTES:
-          return ByteArray.compare(toBytesValue(value1), toBytesValue(value2));
         case UUID:
-          return UuidUtils.compare(toBytesValue(value1), toBytesValue(value2));
+          return ByteArray.compare((byte[]) value1, (byte[]) value2);
         case MAP:
         case OPEN_STRUCT:
         case LIST:
@@ -946,14 +969,11 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
       if (this == BIG_DECIMAL) {
         return ((BigDecimal) value).toPlainString();
       }
-      if (this == UUID) {
-        if (value instanceof UUID) {
-          return UuidUtils.toString((UUID) value);
-        }
-        return UuidUtils.toString(toBytesValue(value));
-      }
       if (this == BYTES) {
-        return BytesUtils.toHexString(toBytesValue(value));
+        return BytesUtils.toHexString((byte[]) value);
+      }
+      if (this == UUID) {
+        return UuidUtils.toString((byte[]) value);
       }
       if (this == MAP || this == OPEN_STRUCT || this == LIST) {
         try {
@@ -1000,25 +1020,8 @@ public abstract class FieldSpec implements Comparable<FieldSpec>, Serializable {
             throw new IllegalStateException();
         }
       } catch (Exception e) {
-        throw new IllegalArgumentException(
-            "Cannot convert value: '" + value + "' to type: " + this + " (" + e.getMessage() + ")", e);
+        throw new IllegalArgumentException("Cannot convert value: '" + value + "' to type: " + this);
       }
-    }
-
-    private byte[] toBytesValue(Object value) {
-      if (value instanceof byte[]) {
-        return (byte[]) value;
-      }
-      if (value instanceof ByteArray) {
-        return ((ByteArray) value).getBytes();
-      }
-      if (value instanceof UUID) {
-        return UuidUtils.toBytes((UUID) value);
-      }
-      if (value instanceof String && this == UUID) {
-        return UuidUtils.toBytes((String) value);
-      }
-      throw new IllegalArgumentException("Unsupported value for " + this + ": " + value);
     }
   }
 
